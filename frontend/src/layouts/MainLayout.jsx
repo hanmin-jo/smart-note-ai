@@ -1,7 +1,18 @@
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Brain, LayoutDashboard, FileText, CalendarDays, BarChart3, Users, LogOut } from "lucide-react";
 
 export default function MainLayout() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const isDashboard = location.pathname.startsWith("/dashboard");
+  const isNotes = location.pathname.startsWith("/notes");
+
+  const tabBase =
+    "inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-slate-600 hover:bg-slate-100 transition";
+  const tabActive =
+    "inline-flex items-center gap-2 rounded-full bg-slate-900 text-white px-3.5 py-1.5 font-medium shadow-sm";
+
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col">
       {/* 상단 네비게이션 바 */}
@@ -19,23 +30,31 @@ export default function MainLayout() {
             </div>
 
             <nav className="hidden md:flex items-center gap-2 text-sm">
-              <button className="inline-flex items-center gap-2 rounded-full bg-slate-900 text-white px-3.5 py-1.5 font-medium shadow-sm">
+              <button
+                type="button"
+                onClick={() => navigate("/dashboard")}
+                className={isDashboard ? tabActive : tabBase}
+              >
                 <LayoutDashboard className="h-4 w-4" />
                 <span>대시보드</span>
               </button>
-              <button className="inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-slate-600 hover:bg-slate-100">
+              <button
+                type="button"
+                onClick={() => navigate("/notes")}
+                className={isNotes ? tabActive : tabBase}
+              >
                 <FileText className="h-4 w-4" />
                 <span>노트</span>
               </button>
-              <button className="inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-slate-600 hover:bg-slate-100">
+              <button type="button" className={tabBase}>
                 <BarChart3 className="h-4 w-4" />
                 <span>퀴즈</span>
               </button>
-              <button className="inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-slate-600 hover:bg-slate-100">
+              <button type="button" className={tabBase}>
                 <CalendarDays className="h-4 w-4" />
                 <span>캘린더</span>
               </button>
-              <button className="inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-slate-600 hover:bg-slate-100">
+              <button type="button" className={tabBase}>
                 <Users className="h-4 w-4" />
                 <span>친구</span>
               </button>

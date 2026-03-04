@@ -1,6 +1,9 @@
 import { NotebookText, CheckCircle2, Star, CalendarDays, PlusCircle, Sparkles, BookOpen, Brain, BarChart3 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 export default function Dashboard() {
+  const navigate = useNavigate();
+
   return (
     <div className="space-y-6 md:space-y-8">
       {/* 상단 배너 */}
@@ -15,7 +18,11 @@ export default function Dashboard() {
 
       {/* 통계 카드 영역 */}
       <section className="grid gap-4 md:gap-5 grid-cols-2 md:grid-cols-4">
-        <div className="rounded-xl bg-white px-4 py-3.5 shadow-sm border border-slate-100 flex flex-col justify-between">
+        <button
+          type="button"
+          onClick={() => navigate("/notes")}
+          className="rounded-xl bg-white px-4 py-3.5 shadow-sm border border-slate-100 flex flex-col justify-between text-left hover:bg-slate-50 transition"
+        >
           <div className="flex items-start justify-between gap-2">
             <div>
               <p className="text-xs text-slate-500">총 노트</p>
@@ -24,7 +31,7 @@ export default function Dashboard() {
             <NotebookText className="h-4 w-4 text-indigo-400" />
           </div>
           <p className="mt-3 text-[11px] text-slate-400">저장된 학습 자료</p>
-        </div>
+        </button>
 
         <div className="rounded-xl bg-white px-4 py-3.5 shadow-sm border border-slate-100 flex flex-col justify-between">
           <div className="flex items-start justify-between gap-2">
@@ -64,7 +71,11 @@ export default function Dashboard() {
 
       {/* 빠른 실행 영역 */}
       <section className="grid gap-4 md:gap-5 md:grid-cols-3">
-        <button className="rounded-xl bg-white px-4 py-4 text-left shadow-sm border border-slate-100 hover:bg-slate-50 transition">
+        <button
+          type="button"
+          onClick={() => navigate("/notes")}
+          className="rounded-xl bg-white px-4 py-4 text-left shadow-sm border border-slate-100 hover:bg-slate-50 transition"
+        >
           <div className="flex items-center gap-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
               <PlusCircle className="h-4 w-4" />
@@ -109,7 +120,11 @@ export default function Dashboard() {
 
       {/* 최근 기록 영역 */}
       <section className="grid gap-4 md:gap-5 md:grid-cols-2">
-        <div className="rounded-2xl bg-white px-5 py-5 md:px-6 md:py-6 shadow-sm border border-slate-100 flex flex-col">
+        <button
+          type="button"
+          onClick={() => navigate("/notes")}
+          className="rounded-2xl bg-white px-5 py-5 md:px-6 md:py-6 shadow-sm border border-slate-100 flex flex-col text-left hover:bg-slate-50 transition"
+        >
           <h3 className="text-sm md:text-base font-semibold text-slate-900">
             최근 노트
           </h3>
@@ -123,7 +138,7 @@ export default function Dashboard() {
               첫 노트 만들기
             </p>
           </div>
-        </div>
+        </button>
 
         <div className="rounded-2xl bg-white px-5 py-5 md:px-6 md:py-6 shadow-sm border border-slate-100 flex flex-col">
           <h3 className="text-sm md:text-base font-semibold text-slate-900">

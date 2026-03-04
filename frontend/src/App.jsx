@@ -5,6 +5,7 @@ import Signup from "./components/Signup.jsx";
 import AuthLayout from "./layouts/AuthLayout.jsx";
 import MainLayout from "./layouts/MainLayout.jsx";
 import Dashboard from "./components/Dashboard.jsx";
+import NoteList from "./components/NoteList.jsx";
 
 function QuizMain() {
   const [content, setContent] = useState("");
@@ -219,6 +220,9 @@ export default function App() {
         </Route>
         <Route path="/dashboard" element={<MainLayout />}>
           <Route index element={<Dashboard />} />
+        </Route>
+        <Route path="/notes" element={<MainLayout />}>
+          <Route index element={<NoteList />} />
         </Route>
         <Route path="/main" element={<QuizMain />} />
       </Routes>
