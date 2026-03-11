@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Search, Filter, FileText, Plus, ChevronDown, X } from "lucide-react";
 
 export default function NoteList() {
@@ -6,6 +7,7 @@ export default function NoteList() {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
   const [notes, setNotes] = useState([]);
+  const navigate = useNavigate();
 
   const openModal = () => setIsModalOpen(true);
   const closeModal = () => setIsModalOpen(false);
@@ -95,23 +97,24 @@ export default function NoteList() {
             </div>
           ) : (
             <div className="px-5 py-5 md:px-6 md:py-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
                 {notes.map((note) => (
                   <article
                     key={note.id}
-                    className="rounded-lg border border-slate-100 bg-white px-4 py-4 shadow-sm hover:-translate-y-1 hover:shadow-md transition transform"
+                    onClick={() => navigate(`/notes/${note.id}`, { state: { note } })}
+                    className="cursor-pointer rounded-lg border border-gray-100 bg-white p-6 shadow-md hover:-translate-y-1 hover:shadow-lg transition transform"
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <h3 className="text-sm md:text-base font-semibold text-slate-900 line-clamp-2">
+                      <h3 className="text-xl font-bold text-slate-900 line-clamp-2">
                         {note.title}
                       </h3>
-                      <span className="inline-flex items-center rounded-full bg-slate-900 text-white px-2.5 py-0.5 text-[11px] font-medium">
+                      <span className="inline-flex items-center rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
                         {note.category}
                       </span>
                     </div>
-                    <p className="mt-3 text-xs text-slate-400">
+                    <p className="mt-4 text-sm text-gray-500">
                       생성 날짜:{" "}
-                      <span className="font-medium text-slate-600">
+                      <span className="font-medium text-gray-700">
                         {note.date}
                       </span>
                     </p>

@@ -1,31 +1,43 @@
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
 
 export default function NoteEditor() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { id } = useParams();
+
   const state = location.state || {};
-  const title = state.title || "새 노트";
-  const category = state.category || "일반";
+  const note = state.note || state;
+  const title = note.title || "새 노트";
+  const category = note.category || "일반";
 
   return (
     <div className="space-y-6 md:space-y-8">
-      {/* 상단: 제목 + 카테고리 뱃지 */}
-      <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-slate-900">
-            {title}
-          </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            학습 내용을 충분히 입력한 뒤 AI 요약과 퀴즈 생성을 진행해 보세요.
-          </p>
-        </div>
+      {/* 상단: 뒤로가기 + 제목 + 카테고리 뱃지 */}
+      <header className="flex items-start justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="mt-0.5 inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50 transition"
+            aria-label="뒤로 가기"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
 
-        <div className="inline-flex items-center gap-2">
-          <span className="inline-flex items-center rounded-full bg-slate-900 text-white px-3 py-1 text-xs font-medium">
-            카테고리
-          </span>
-          <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">
-            {category}
-          </span>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900">
+                {title}
+              </h1>
+              <span className="inline-flex items-center rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                {category}
+              </span>
+            </div>
+            <p className="mt-1 text-sm text-slate-500">
+              노트 ID: <span className="font-medium text-slate-700">{id}</span>
+            </p>
+          </div>
         </div>
       </header>
 
@@ -36,20 +48,35 @@ export default function NoteEditor() {
             내용
           </label>
           <textarea
-            className="min-h-[320px] w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm md:text-base text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300 transition"
+            className="min-h-[520px] w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm md:text-base text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300 transition"
             placeholder="학습 내용을 입력하거나 붙여넣기 해주세요..."
           />
-        </div>
-      </section>
 
-      {/* 하단: 액션 버튼 */}
-      <section className="flex items-center justify-end">
-        <button
-          type="button"
-          className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-5 py-2.5 text-sm md:text-base font-semibold text-white shadow-sm hover:bg-slate-800 transition"
-        >
-          ✨ AI 요약 및 퀴즈 생성
-        </button>
+          {/* 하단 버튼: textarea 바로 아래 우측 정렬 */}
+          <div className="mt-4 flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => alert("노트가 저장되었습니다!")}
+              className="inline-flex items-center justify-center rounded-xl border border-gray-300 bg-transparent px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition"
+            >
+              💾 저장
+            </button>
+            <button
+              type="button"
+              onClick={() => alert("AI가 요약을 시작합니다...")}
+              className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 transition"
+            >
+              ✨ AI 요약
+            </button>
+            <button
+              type="button"
+              onClick={() => alert("맞춤형 퀴즈를 생성합니다!")}
+              className="inline-flex items-center justify-center rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-black transition"
+            >
+              🎯 퀴즈 생성
+            </button>
+          </div>
+        </div>
       </section>
     </div>
   );

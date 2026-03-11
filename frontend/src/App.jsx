@@ -224,6 +224,7 @@ export default function App() {
         </Route>
         <Route path="/notes" element={<MainLayout />}>
           <Route index element={<NoteList />} />
+          <Route path=":id" element={<NoteEditor />} />
         </Route>
         <Route path="/note/write" element={<MainLayout />}>
           <Route index element={<NoteEditor />} />
