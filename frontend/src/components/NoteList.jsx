@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, Filter, FileText, Plus, ChevronDown, X } from "lucide-react";
 
@@ -7,26 +7,51 @@ export default function NoteList() {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
   const [notes, setNotes] = useState([]);
+  const [notesLoading, setNotesLoading] = useState(false);
+  const [notesError, setNotesError] = useState("");
   const navigate = useNavigate();
 
   const openModal = () => setIsModalOpen(true);
   const closeModal = () => setIsModalOpen(false);
 
-  const handleCreateNote = () => {
-    const trimmedTitle = title.trim();
-    const trimmedCategory = category.trim();
-
-    const newNote = {
-      id: Date.now(),
-      title: trimmedTitle || "제목 없는 노트",
-      category: trimmedCategory || "일반",
-      date: new Date().toLocaleDateString(),
+  // 백엔드에서 노트 목록 불러오기
+  useEffect(() => {
+    const fetchNotes = async () => {
+      setNotesLoading(true);
+      setNotesError("");
+      try {
+        const res = await fetch("http://localhost:8000/api/notes");
+        if (!res.ok) {
+          throw new Error("노트 목록을 불러오는데 실패했습니다.");
+        }
+        const data = await res.json();
+        setNotes(Array.isArray(data) ? data : []);
+      } catch (e) {
+        setNotesError(e?.message || "노트 목록을 불러오는 중 오류가 발생했습니다.");
+      } finally {
+        setNotesLoading(false);
+      }
     };
 
-    setNotes((prev) => [newNote, ...prev]);
+    fetchNotes();
+  }, []);
+
+  const handleCreateNote = () => {
+    const trimmedTitle = title.trim();
+
     setIsModalOpen(false);
+    const initialTitle = trimmedTitle || "새 노트";
     setTitle("");
     setCategory("");
+
+    navigate("/note/write", {
+      state: {
+        note: {
+          title: initialTitle,
+          content: "",
+        },
+      },
+    });
   };
 
   return (
@@ -78,7 +103,21 @@ export default function NoteList() {
 
         {/* 하단: 노트 목록 / 빈 상태 */}
         <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-          {notes.length === 0 ? (
+          {notesLoading && (
+            <div className="flex flex-col items-center justify-center px-6 py-16 md:py-20 text-center">
+              <p className="mt-2 text-sm text-slate-500">
+                노트를 불러오는 중입니다...
+              </p>
+            </div>
+          )}
+
+          {!notesLoading && notesError && (
+            <div className="flex flex-col items-center justify-center px-6 py-16 md:py-20 text-center">
+              <p className="text-sm text-red-500">{notesError}</p>
+            </div>
+          )}
+
+          {!notesLoading && !notesError && notes.length === 0 && (
             <div className="flex flex-col items-center justify-center px-6 py-16 md:py-20 text-center">
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100">
                 <FileText className="h-7 w-7 text-slate-300" />
@@ -95,27 +134,31 @@ export default function NoteList() {
                 <span>첫 노트 만들기</span>
               </button>
             </div>
-          ) : (
+          )}
+
+          {!notesLoading && !notesError && notes.length > 0 && (
             <div className="px-5 py-5 md:px-6 md:py-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
                 {notes.map((note) => (
                   <article
                     key={note.id}
-                    onClick={() => navigate(`/notes/${note.id}`, { state: { note } })}
+                    onClick={() =>
+                      navigate(`/notes/${note.id}`, {
+                        state: { note },
+                      })
+                    }
                     className="cursor-pointer rounded-lg border border-gray-100 bg-white p-6 shadow-md hover:-translate-y-1 hover:shadow-lg transition transform"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <h3 className="text-xl font-bold text-slate-900 line-clamp-2">
                         {note.title}
                       </h3>
-                      <span className="inline-flex items-center rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
-                        {note.category}
-                      </span>
                     </div>
                     <p className="mt-4 text-sm text-gray-500">
                       생성 날짜:{" "}
                       <span className="font-medium text-gray-700">
-                        {note.date}
+                        {new Date(note.created_at || "").toLocaleDateString() ||
+                          "-"}
                       </span>
                     </p>
                   </article>

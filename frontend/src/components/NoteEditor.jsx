@@ -1,6 +1,7 @@
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { useState } from "react";
+import ReactMarkdown from "react-markdown";
 
 export default function NoteEditor() {
   const location = useLocation();
@@ -9,14 +10,17 @@ export default function NoteEditor() {
 
   const state = location.state || {};
   const note = state.note || state;
-  const title = note.title || "새 노트";
+  const initialTitle = note.title || "새 노트";
   const category = note.category || "일반";
 
-  const [content, setContent] = useState("");
+  const [title, setTitle] = useState(initialTitle);
+  const [content, setContent] = useState(note.content || "");
   const [summaryResult, setSummaryResult] = useState("");
   const [quizResult, setQuizResult] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [loadingType, setLoadingType] = useState(null); // "summary" | "quiz" | null
+  const [isLoadingSummary, setIsLoadingSummary] = useState(false);
+  const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
+  const [isEditingSummary, setIsEditingSummary] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const toDisplayText = (data) => {
     if (typeof data === "string") return data;
@@ -27,14 +31,71 @@ export default function NoteEditor() {
     }
   };
 
+  const handleSaveNote = async () => {
+    if (!title.trim()) {
+      alert("노트 제목을 입력해 주세요.");
+      return;
+    }
+    if (!content.trim()) {
+      alert("노트 내용을 입력해 주세요.");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      // 새 노트 작성 (/note/write) 인 경우: 생성
+      if (!id) {
+        const res = await fetch("http://localhost:8000/api/notes/", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title,
+            content,
+            user_id: 1,
+          }),
+        });
+
+        if (!res.ok) {
+          const errJson = await res.json().catch(() => null);
+          const detail = errJson?.detail || "노트 저장에 실패했습니다.";
+          throw new Error(detail);
+        }
+
+        await res.json();
+        alert("노트가 저장되었습니다.");
+        navigate("/notes", { replace: true });
+      } else {
+        // 기존 노트 편집 (/notes/:id) 인 경우: 제목/내용 업데이트
+        const res = await fetch(`http://localhost:8000/api/notes/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title, content }),
+        });
+
+        if (!res.ok) {
+          const errJson = await res.json().catch(() => null);
+          const detail = errJson?.detail || "노트 수정에 실패했습니다.";
+          throw new Error(detail);
+        }
+
+        await res.json();
+        alert("노트가 수정되었습니다.");
+        navigate("/notes", { replace: true });
+      }
+    } catch (e) {
+      alert(e?.message || "노트 저장 중 오류가 발생했습니다.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleSummary = async () => {
     if (!content.trim()) {
       alert("내용을 먼저 입력해 주세요.");
       return;
     }
 
-    setIsLoading(true);
-    setLoadingType("summary");
+    setIsLoadingSummary(true);
     try {
       const res = await fetch("http://localhost:8000/api/summary", {
         method: "POST",
@@ -48,8 +109,7 @@ export default function NoteEditor() {
     } catch (e) {
       alert(e?.message || "요약 중 오류가 발생했습니다.");
     } finally {
-      setIsLoading(false);
-      setLoadingType(null);
+      setIsLoadingSummary(false);
     }
   };
 
@@ -59,8 +119,7 @@ export default function NoteEditor() {
       return;
     }
 
-    setIsLoading(true);
-    setLoadingType("quiz");
+    setIsGeneratingQuiz(true);
     try {
       const res = await fetch("http://localhost:8000/api/quiz", {
         method: "POST",
@@ -74,8 +133,7 @@ export default function NoteEditor() {
     } catch (e) {
       alert(e?.message || "퀴즈 생성 중 오류가 발생했습니다.");
     } finally {
-      setIsLoading(false);
-      setLoadingType(null);
+      setIsGeneratingQuiz(false);
     }
   };
 
@@ -83,7 +141,7 @@ export default function NoteEditor() {
     <div className="space-y-6 md:space-y-8">
       {/* 상단: 뒤로가기 + 제목 + 카테고리 뱃지 */}
       <header className="flex items-start justify-between gap-4">
-        <div className="flex items-start gap-3">
+            <div className="flex items-start gap-3">
           <button
             type="button"
             onClick={() => navigate(-1)}
@@ -93,11 +151,14 @@ export default function NoteEditor() {
             <ArrowLeft className="h-4 w-4" />
           </button>
 
-          <div>
+            <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900">
-                {title}
-              </h1>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900 bg-transparent border-none focus:outline-none focus:ring-0 px-0"
+              />
               <span className="inline-flex items-center rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
                 {category}
               </span>
@@ -127,12 +188,33 @@ export default function NoteEditor() {
             <div className="mt-4 space-y-3">
               {summaryResult && (
                 <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
-                  <p className="text-xs font-semibold text-blue-700">
-                    요약 결과
-                  </p>
-                  <pre className="mt-2 whitespace-pre-wrap break-words text-sm text-slate-800">
-                    {summaryResult}
-                  </pre>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold text-blue-700">
+                      요약 결과
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingSummary((prev) => !prev)}
+                      className="text-[11px] rounded-full border border-blue-200 bg-white/70 px-2.5 py-1 font-medium text-blue-700 hover:bg-blue-50 transition"
+                    >
+                      {isEditingSummary ? "✅ 완료" : "✏️ 수정하기"}
+                    </button>
+                  </div>
+
+                  <div className="mt-2">
+                    {isEditingSummary ? (
+                      <textarea
+                        className="w-full rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-400/60 focus:border-blue-300 transition"
+                        rows={8}
+                        value={summaryResult}
+                        onChange={(e) => setSummaryResult(e.target.value)}
+                      />
+                    ) : (
+                      <div className="prose max-w-none text-gray-800 prose-p:my-1 prose-ul:my-1 prose-li:my-0.5 prose-headings:mb-2 prose-headings:mt-4">
+                        <ReactMarkdown>{summaryResult}</ReactMarkdown>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
               {quizResult && (
@@ -140,9 +222,9 @@ export default function NoteEditor() {
                   <p className="text-xs font-semibold text-purple-700">
                     퀴즈 결과
                   </p>
-                  <pre className="mt-2 whitespace-pre-wrap break-words text-sm text-slate-800">
-                    {quizResult}
-                  </pre>
+                  <div className="mt-2 prose max-w-none text-gray-800 prose-p:my-1 prose-ul:my-1 prose-li:my-0.5 prose-headings:mb-2 prose-headings:mt-4 whitespace-pre-wrap">
+                    <ReactMarkdown>{quizResult}</ReactMarkdown>
+                  </div>
                 </div>
               )}
             </div>
@@ -152,18 +234,19 @@ export default function NoteEditor() {
           <div className="mt-4 flex items-center justify-end gap-3">
             <button
               type="button"
-              onClick={() => alert("노트가 저장되었습니다!")}
-              className="inline-flex items-center justify-center rounded-xl border border-gray-300 bg-transparent px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition"
+              onClick={handleSaveNote}
+              disabled={isSaving}
+              className="inline-flex items-center justify-center rounded-xl border border-gray-300 bg-transparent px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              💾 저장
+              {isSaving ? "저장 중..." : "💾 저장"}
             </button>
             <button
               type="button"
               onClick={handleSummary}
-              disabled={isLoading}
+              disabled={isLoadingSummary}
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 transition disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {isLoading && loadingType === "summary" ? (
+              {isLoadingSummary ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
                   요약 중...
@@ -175,10 +258,10 @@ export default function NoteEditor() {
             <button
               type="button"
               onClick={handleQuiz}
-              disabled={isLoading}
+              disabled={isGeneratingQuiz}
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-black transition disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {isLoading && loadingType === "quiz" ? (
+              {isGeneratingQuiz ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
                   퀴즈 생성 중...

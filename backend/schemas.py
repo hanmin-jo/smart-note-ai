@@ -46,3 +46,13 @@ class NoteWithQuizzesResponse(BaseModel):
     note: NoteResponse
     quizzes: List[QuizResponse]
 
+
+class NoteUpdateRequest(BaseModel):
+    """
+    노트의 제목/내용을 부분 업데이트할 때 사용하는 스키마.
+    """
+
+    title: Optional[str] = None
+    content: Optional[str] = None
+
+

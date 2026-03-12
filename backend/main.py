@@ -13,7 +13,7 @@ from google import genai
 from database import Base, engine, get_db
 import models
 from models import Note, Quiz
-from schemas import NoteCreateRequest, NoteWithQuizzesResponse, NoteResponse, QuizResponse
+from schemas import NoteCreateRequest, NoteWithQuizzesResponse, NoteResponse, QuizResponse, NoteUpdateRequest
 
 
 def create_tables() -> None:
@@ -78,12 +78,18 @@ def create_summary(payload: AIRequest) -> Dict[str, str]:
             detail="GEMINI_API_KEY가 설정되어 있지 않습니다.",
         )
 
-    contents = (
-        "다음 학습 노트 텍스트를 분석해서, 분량에 제한을 두지 말고 전체 내용의 핵심과 "
-        "중요한 디테일이 모두 포함되도록 명확하고 구조적으로 요약해 줘. "
-        "마크다운 형식의 글머리 기호 등을 사용해서 가독성 좋게 정리해 줘.\n\n"
-        f"--- 학습 노트 시작 ---\n{payload.text}\n--- 학습 노트 끝 ---"
-    )
+    contents = f"""
+당신은 학생들의 학습을 돕는 보조 AI입니다. 
+아래 [원본 텍스트]를 읽고 핵심 내용만 요약해 주세요.
+
+[엄격한 규칙]
+절대 외부 지식을 추가하지 마세요. 오직 [원본 텍스트]에 있는 정보만 사용하세요.
+'다음은 요약입니다' 같은 서론이나 인사말은 생략하고, 바로 요약 내용만 출력하세요.
+마크다운(Markdown) 문법을 사용해 가독성 좋게 구조화하세요.
+
+[원본 텍스트]
+{payload.text}
+"""
 
     try:
         client = genai.Client(api_key=api_key)
@@ -102,9 +108,9 @@ def create_summary(payload: AIRequest) -> Dict[str, str]:
 
 
 @app.post("/api/quiz", tags=["ai"])
-def create_quiz(payload: AIRequest) -> Dict[str, str]:
+def create_quiz(payload: AIRequest) -> Dict[str, Any]:
     """
-    Gemini를 사용하여 객관식 퀴즈 3개를 생성하는 엔드포인트.
+    Gemini를 사용하여 객관식 4지선다 퀴즈를 JSON 형식으로 생성하는 엔드포인트.
     """
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
@@ -113,20 +119,62 @@ def create_quiz(payload: AIRequest) -> Dict[str, str]:
             detail="GEMINI_API_KEY가 설정되어 있지 않습니다.",
         )
 
-    contents = (
-        "다음 텍스트를 바탕으로 학습자가 풀어볼 수 있는 객관식 퀴즈 3문제를 만들어 줘. "
-        "각 문제에는 4개의 보기와 정답, 간단한 해설을 포함해서 보기 좋게 정리해 줘.\n\n"
-        f"--- 학습 노트 시작 ---\n{payload.text}\n--- 학습 노트 끝 ---"
-    )
+    prompt = f"""
+당신은 '최고의 1타 출제위원 AI'입니다. 아래 [학습 노트]를 바탕으로 객관식 4지선다 퀴즈를 출제하세요.
+분량에 따라 3~5문제를 출제하며, 반드시 아래의 JSON 형식으로만 응답해야 합니다. 마크다운 코드블록(```json 등)이나 다른 설명은 절대 포함하지 말고 오직 JSON 텍스트만 출력하세요.
+[JSON 응답 양식]
+{{
+  "questions": [
+    {{
+      "id": 1,
+      "question": "문제 내용",
+      "options": ["보기1", "보기2", "보기3", "보기4"],
+      "answer": 0,
+      "explanation": "정답인 이유와 간단한 해설"
+    }}
+  ]
+}}
+
+[학습 노트]
+{payload.text}
+"""
 
     try:
         client = genai.Client(api_key=api_key)
         response = client.models.generate_content(
             model="gemini-2.5-flash",
-            contents=contents,
+            contents=prompt,
         )
-        quiz_text = response.text if hasattr(response, "text") else str(response)
-        return {"quiz": quiz_text}
+        raw_text = response.text if hasattr(response, "text") else str(response)
+
+        if not isinstance(raw_text, str):
+            raise ValueError("모델 응답이 문자열 형식이 아닙니다.")
+
+        # 마크다운 코드블록 백틱 등 불필요한 래퍼 제거
+        cleaned = raw_text.strip()
+        for fence in ("```json", "```JSON", "```", "~~~json", "~~~JSON", "~~~"):
+            cleaned = cleaned.replace(fence, "")
+        cleaned = cleaned.strip()
+
+        try:
+            quiz_json = json.loads(cleaned)
+        except json.JSONDecodeError as parse_err:
+            print(f"🚨 퀴즈 JSON 파싱 오류: {parse_err}; 원본 응답: {cleaned}")
+            raise HTTPException(
+                status_code=500,
+                detail="퀴즈 JSON 파싱 중 오류가 발생했습니다.",
+            ) from parse_err
+
+        # 최소한의 구조 확인
+        if not isinstance(quiz_json, dict) or "questions" not in quiz_json:
+            raise HTTPException(
+                status_code=500,
+                detail="퀴즈 JSON 구조가 올바르지 않습니다. 'questions' 키가 필요합니다.",
+            )
+
+        return {"quiz": quiz_json}
+    except HTTPException:
+        raise
     except Exception as e:  # noqa: BLE001
         print(f"🚨 AI API 에러 상세 (/api/quiz): {str(e)}")
         raise HTTPException(
@@ -366,6 +414,47 @@ def create_note_and_quizzes(
         )
 
     return NoteWithQuizzesResponse(note=note_resp, quizzes=quiz_resps)
+
+
+@app.get(
+    "/api/notes",
+    response_model=list[NoteResponse],
+    tags=["notes"],
+)
+def list_notes(db: Session = Depends(get_db)) -> list[NoteResponse]:
+    """
+    저장된 노트 목록을 최신 순으로 반환하는 엔드포인트.
+    (현재는 인증이 없어 모든 사용자 노트를 반환)
+    """
+    notes = db.query(Note).order_by(Note.created_at.desc()).all()
+    return [NoteResponse.model_validate(note) for note in notes]
+
+
+@app.patch(
+    "/api/notes/{note_id}",
+    response_model=NoteResponse,
+    tags=["notes"],
+)
+def update_note(
+    note_id: int,
+    payload: NoteUpdateRequest,
+    db: Session = Depends(get_db),
+) -> NoteResponse:
+    """
+    노트의 제목/내용을 부분 업데이트하는 엔드포인트.
+    """
+    note: Note | None = db.query(Note).filter(Note.id == note_id).first()
+    if note is None:
+        raise HTTPException(status_code=404, detail="해당 노트를 찾을 수 없습니다.")
+
+    if payload.title is not None:
+        note.title = payload.title
+    if payload.content is not None:
+        note.content = payload.content
+
+    db.commit()
+    db.refresh(note)
+    return NoteResponse.model_validate(note)
 
 
 if __name__ == "__main__":

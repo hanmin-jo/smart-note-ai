@@ -7,6 +7,7 @@ import MainLayout from "./layouts/MainLayout.jsx";
 import Dashboard from "./components/Dashboard.jsx";
 import NoteList from "./components/NoteList.jsx";
 import NoteEditor from "./components/NoteEditor.jsx";
+import QuizPage from "./components/QuizPage.jsx";
 
 function QuizMain() {
   const [content, setContent] = useState("");
@@ -228,6 +229,9 @@ export default function App() {
         </Route>
         <Route path="/note/write" element={<MainLayout />}>
           <Route index element={<NoteEditor />} />
+        </Route>
+        <Route path="/quiz" element={<MainLayout />}>
+          <Route index element={<QuizPage />} />
         </Route>
         <Route path="/main" element={<QuizMain />} />
       </Routes>

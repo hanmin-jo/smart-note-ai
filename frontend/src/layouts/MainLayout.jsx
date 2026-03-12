@@ -7,6 +7,7 @@ export default function MainLayout() {
 
   const isDashboard = location.pathname.startsWith("/dashboard");
   const isNotes = location.pathname.startsWith("/notes");
+  const isQuiz = location.pathname.startsWith("/quiz");
 
   const tabBase =
     "inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-slate-600 hover:bg-slate-100 transition";
@@ -46,7 +47,11 @@ export default function MainLayout() {
                 <FileText className="h-4 w-4" />
                 <span>노트</span>
               </button>
-              <button type="button" className={tabBase}>
+              <button
+                type="button"
+                onClick={() => navigate("/quiz")}
+                className={isQuiz ? tabActive : tabBase}
+              >
                 <BarChart3 className="h-4 w-4" />
                 <span>퀴즈</span>
               </button>
