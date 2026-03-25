@@ -32,6 +32,9 @@ from auth import create_access_token, get_current_user, hash_password, verify_pa
 
 load_dotenv()
 
+# Gemini — 요약·PDF 요약·퀴즈 등 모든 generate_content 호출에서 동일 모델 사용
+GEMINI_MODEL = "gemini-1.5-flash"
+
 
 # ─── DB 초기화 ────────────────────────────────────────────────────────────────
 
@@ -118,7 +121,7 @@ def generate_quizzes_with_gemini(content: str) -> List[Dict[str, Any]]:
 [학습 노트]
 {content[:4000]}
 """
-    response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+    response = client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
     data = _parse_gemini_json(response.text, context="note_quiz_generation")
     questions = data.get("questions", [])
 
@@ -244,7 +247,7 @@ def create_summary(
 {text[:4000]}
 """
     try:
-        response = client.models.generate_content(model="gemini-2.5-flash", contents=contents)
+        response = client.models.generate_content(model=GEMINI_MODEL, contents=contents)
         return {"summary": response.text}
     except Exception as e:
         print(f"[Gemini Summary Error] {e}")
@@ -322,7 +325,7 @@ async def create_pdf_summary(
 """
     try:
         response = client.models.generate_content(
-            model="gemini-1.5-flash",
+            model=GEMINI_MODEL,
             contents=contents,
         )
         return {"summary": response.text}
@@ -366,7 +369,7 @@ def create_quiz_adhoc(
 {text[:4000]}
 """
     try:
-        response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+        response = client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
         quiz_json = _parse_gemini_json(response.text, context="adhoc_quiz_preview")
         if "questions" not in quiz_json:
             print(

@@ -39,7 +39,11 @@ export default function NoteList() {
       const { data } = await api.get(`/api/notes${qs}`);
       setNotes(Array.isArray(data) ? data : []);
     } catch (e) {
-      setError(e?.message || "노트 목록을 불러오는데 실패했습니다.");
+      setError(
+        typeof e?.message === "string"
+          ? e.message
+          : "노트 목록을 불러오는데 실패했습니다."
+      );
     } finally {
       setLoading(false);
     }
@@ -59,7 +63,7 @@ export default function NoteList() {
 
   // 검색 디바운스
   useEffect(() => {
-    const timer = setTimeout(() => setSearchQuery(searchInput), 350);
+    const timer = setTimeout(() => setSearchQuery(searchInput || ""), 350);
     return () => clearTimeout(timer);
   }, [searchInput]);
 
@@ -138,7 +142,9 @@ export default function NoteList() {
           <div className="relative w-full md:max-w-md">
             <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
-              type="text" value={searchInput} onChange={(e) => setSearchInput(e.target.value)}
+              type="text"
+              value={searchInput || ""}
+              onChange={(e) => setSearchInput(e.target.value ?? "")}
               placeholder="제목 또는 내용 검색..."
               className="w-full rounded-full border border-slate-200 bg-white pl-11 pr-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10 transition"
             />
@@ -315,8 +321,8 @@ export default function NoteList() {
                 <label className="block text-xs md:text-sm font-medium text-slate-700">제목</label>
                 <input
                   type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
+                  value={title || ""}
+                  onChange={(e) => setTitle(e.target.value ?? "")}
                   placeholder="노트 제목을 입력하세요"
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 transition"
                 />
@@ -349,7 +355,9 @@ export default function NoteList() {
               <div className="space-y-1">
                 <label className="block text-xs md:text-sm font-medium text-slate-700">카테고리</label>
                 <input
-                  list="note-categories" value={category} onChange={(e) => setCategory(e.target.value)}
+                  list="note-categories"
+                  value={category || ""}
+                  onChange={(e) => setCategory(e.target.value ?? "")}
                   placeholder="카테고리를 선택하거나 입력하세요"
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 transition"
                 />
