@@ -4,21 +4,23 @@ export function getToken() {
   return localStorage.getItem("token");
 }
 
-function authHeaders(extra = {}) {
+function authHeaders(extra = {}, skipJsonContentType = false) {
   const token = getToken();
   return {
-    "Content-Type": "application/json",
+    ...(!skipJsonContentType ? { "Content-Type": "application/json" } : {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...extra,
   };
 }
 
 async function request(path, options = {}) {
+  const isFormData =
+    typeof FormData !== "undefined" && options.body instanceof FormData;
   let res;
   try {
     res = await fetch(`${BASE_URL}${path}`, {
       ...options,
-      headers: authHeaders(options.headers),
+      headers: authHeaders(options.headers, isFormData),
     });
   } catch (e) {
     // 네트워크 단에서 실패한 경우
@@ -63,7 +65,11 @@ async function request(path, options = {}) {
 
 export const api = {
   get: (path) => request(path),
-  post: (path, body) => request(path, { method: "POST", body: JSON.stringify(body) }),
+  post: (path, body) =>
+    request(path, {
+      method: "POST",
+      body: body instanceof FormData ? body : JSON.stringify(body),
+    }),
   patch: (path, body) => request(path, { method: "PATCH", body: JSON.stringify(body) }),
   delete: (path) => request(path, { method: "DELETE" }),
 };

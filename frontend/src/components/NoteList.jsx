@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, Filter, FileText, Plus, ChevronDown, X, Trash2 } from "lucide-react";
 import { useToast } from "../context/ToastContext";
@@ -9,8 +9,11 @@ export default function NoteList() {
   const toast = useToast();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [inputType, setInputType] = useState("manual");
+  const [pdfFile, setPdfFile] = useState(null);
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("일반");
+  const modalPdfInputRef = useRef(null);
 
   const [notes, setNotes] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -60,13 +63,39 @@ export default function NoteList() {
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  const handleCreateNote = () => {
-    setIsModalOpen(false);
-    navigate("/note/write", {
-      state: { note: { title: title.trim() || "새 노트", content: "", category } },
-    });
+  const resetModalForm = () => {
     setTitle("");
     setCategory("일반");
+    setInputType("manual");
+    setPdfFile(null);
+    if (modalPdfInputRef.current) modalPdfInputRef.current.value = "";
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    resetModalForm();
+  };
+
+  const handleCreateNote = () => {
+    if (inputType === "manual") {
+      setIsModalOpen(false);
+      navigate("/note/write", {
+        state: { note: { title: title.trim() || "새 노트", content: "", category } },
+      });
+      resetModalForm();
+      return;
+    }
+
+    if (!pdfFile) {
+      toast("PDF 파일을 선택해 주세요.", "warning");
+      return;
+    }
+
+    setIsModalOpen(false);
+    navigate("/note/write", {
+      state: { pdfFile, category, title: title.trim() },
+    });
+    resetModalForm();
   };
 
   const handleDelete = async (e, noteId) => {
@@ -224,31 +253,99 @@ export default function NoteList() {
       {/* 새 노트 모달 */}
       {isModalOpen && (
         <div className="fixed inset-0 z-40 flex items-center justify-center">
-          <button type="button" aria-label="모달 닫기" onClick={() => setIsModalOpen(false)}
+          <button type="button" aria-label="모달 닫기" onClick={closeModal}
             className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"
           />
           <div className="relative z-50 w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-slate-200 px-6 py-6 md:px-8 md:py-7">
             <header className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-lg md:text-xl font-semibold text-slate-900">새 노트 작성</h2>
-                <p className="mt-1 text-xs md:text-sm text-slate-500">제목과 카테고리를 설정하세요</p>
+                <p className="mt-1 text-xs md:text-sm text-slate-500">
+                  {inputType === "manual"
+                    ? "제목과 카테고리를 설정하세요"
+                    : "제목, PDF 파일, 카테고리를 설정하세요"}
+                </p>
               </div>
-              <button type="button" onClick={() => setIsModalOpen(false)}
+              <button type="button" onClick={closeModal}
                 className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 transition"
               >
                 <X className="h-4 w-4" />
               </button>
             </header>
 
+            <div
+              className="mt-5 flex rounded-xl border border-slate-200 bg-slate-50/80 p-1"
+              role="tablist"
+              aria-label="노트 작성 방식"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={inputType === "manual"}
+                onClick={() => {
+                  setInputType("manual");
+                  setPdfFile(null);
+                  if (modalPdfInputRef.current) modalPdfInputRef.current.value = "";
+                }}
+                className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                  inputType === "manual"
+                    ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200/80"
+                    : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                ✏️ 직접 작성
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={inputType === "pdf"}
+                onClick={() => setInputType("pdf")}
+                className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                  inputType === "pdf"
+                    ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200/80"
+                    : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                📄 PDF 업로드
+              </button>
+            </div>
+
             <div className="mt-5 space-y-4">
               <div className="space-y-1">
                 <label className="block text-xs md:text-sm font-medium text-slate-700">제목</label>
                 <input
-                  type="text" value={title} onChange={(e) => setTitle(e.target.value)}
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
                   placeholder="노트 제목을 입력하세요"
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 transition"
                 />
               </div>
+
+              {inputType === "pdf" && (
+                <div className="space-y-1">
+                  <label className="block text-xs md:text-sm font-medium text-slate-700">PDF 파일</label>
+                  <input
+                    ref={modalPdfInputRef}
+                    type="file"
+                    accept=".pdf,application/pdf"
+                    className="hidden"
+                    onChange={(e) => setPdfFile(e.target.files?.[0] ?? null)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => modalPdfInputRef.current?.click()}
+                    className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center transition hover:border-slate-300 hover:bg-slate-100/80"
+                  >
+                    <FileText className="h-8 w-8 text-slate-400" />
+                    <span className="text-sm font-medium text-slate-700">
+                      {pdfFile ? pdfFile.name : "클릭하여 PDF 선택"}
+                    </span>
+                    <span className="text-xs text-slate-500">선택한 파일 이름이 위에 표시됩니다</span>
+                  </button>
+                </div>
+              )}
+
               <div className="space-y-1">
                 <label className="block text-xs md:text-sm font-medium text-slate-700">카테고리</label>
                 <input

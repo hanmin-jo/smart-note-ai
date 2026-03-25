@@ -1,15 +1,17 @@
 import json
 import os
+from io import BytesIO
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
 from google import genai
+from pypdf import PdfReader
 
 from database import Base, engine, get_db
 from models import Note, Quiz, StudyRecord, User
@@ -247,6 +249,89 @@ def create_summary(
     except Exception as e:
         print(f"[Gemini Summary Error] {e}")
         raise HTTPException(status_code=500, detail="AI 요약 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.")
+
+
+@app.post("/api/pdf-summary", tags=["ai"])
+async def create_pdf_summary(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, str]:
+    if file.content_type:
+        ct = file.content_type.lower()
+        if ct not in (
+            "application/pdf",
+            "application/x-pdf",
+            "application/octet-stream",
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="PDF 파일만 업로드할 수 있습니다.",
+            )
+
+    try:
+        file_bytes = await file.read()
+    except Exception as e:
+        print(f"[PDF Upload Read Error] {e}")
+        raise HTTPException(
+            status_code=400,
+            detail="파일을 읽는 중 오류가 발생했습니다.",
+        )
+
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="빈 파일입니다.")
+
+    try:
+        reader = PdfReader(BytesIO(file_bytes))
+    except Exception as e:
+        print(f"[PDF Parse Error] {e}")
+        raise HTTPException(
+            status_code=400,
+            detail="PDF 형식이 올바르지 않거나 손상된 파일입니다.",
+        )
+
+    extracted_parts: List[str] = []
+    try:
+        for page in reader.pages:
+            extracted_parts.append(page.extract_text() or "")
+    except Exception as e:
+        print(f"[PDF Extract Error] {e}")
+        raise HTTPException(
+            status_code=400,
+            detail="PDF 페이지에서 텍스트를 읽는 중 오류가 발생했습니다.",
+        )
+
+    text = "\n".join(extracted_parts).strip()
+    if not text:
+        raise HTTPException(
+            status_code=400,
+            detail="PDF에서 텍스트를 추출할 수 없습니다. (이미지 전용 PDF일 수 있습니다.)",
+        )
+
+    client = _get_gemini_client()
+    contents = f"""
+당신은 학생들의 학습을 돕는 보조 AI입니다.
+아래 [원본 텍스트]를 읽고 핵심 내용만 요약해 주세요.
+
+[규칙]
+- 오직 원본 텍스트의 정보만 사용
+- 서론/인사말 없이 바로 요약 내용 출력
+- 마크다운 문법으로 가독성 좋게 구조화
+
+[원본 텍스트]
+{text[:4000]}
+"""
+    try:
+        response = client.models.generate_content(
+            model="gemini-1.5-flash",
+            contents=contents,
+        )
+        return {"summary": response.text}
+    except Exception as e:
+        print(f"[Gemini PDF Summary Error] {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="AI 요약 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
+        )
 
 
 @app.post("/api/quiz", tags=["ai"])
