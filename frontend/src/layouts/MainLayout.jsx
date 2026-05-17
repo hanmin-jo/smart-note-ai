@@ -1,5 +1,5 @@
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Brain, LayoutDashboard, FileText, BarChart3, LogOut } from "lucide-react";
+import { Brain, LayoutDashboard, FileText, BarChart3, CalendarDays, LogOut } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 
@@ -12,6 +12,7 @@ export default function MainLayout() {
   const isDashboard = location.pathname.startsWith("/dashboard");
   const isNotes = location.pathname.startsWith("/notes");
   const isQuiz = location.pathname.startsWith("/quiz");
+  const isCalendar = location.pathname.startsWith("/calendar");
 
   const tabBase = "inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-slate-600 hover:bg-slate-100 transition text-sm";
   const tabActive = "inline-flex items-center gap-2 rounded-full bg-slate-900 text-white px-3.5 py-1.5 font-medium shadow-sm text-sm";
@@ -45,6 +46,9 @@ export default function MainLayout() {
               </button>
               <button type="button" onClick={() => navigate("/quiz")} className={isQuiz ? tabActive : tabBase}>
                 <BarChart3 className="h-4 w-4" /><span>퀴즈</span>
+              </button>
+              <button type="button" onClick={() => navigate("/calendar")} className={isCalendar ? tabActive : tabBase}>
+                <CalendarDays className="h-4 w-4" /><span>캘린더</span>
               </button>
             </nav>
           </div>

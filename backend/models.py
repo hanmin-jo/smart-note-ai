@@ -1,8 +1,9 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import (
     Boolean,
     Column,
+    Date,
     DateTime,
     ForeignKey,
     Integer,
@@ -35,6 +36,15 @@ class User(Base):
     )
     study_records: Mapped[list["StudyRecord"]] = relationship(
         "StudyRecord", back_populates="user", cascade="all, delete-orphan"
+    )
+    study_schedules: Mapped[list["StudySchedule"]] = relationship(
+        "StudySchedule", back_populates="user", cascade="all, delete-orphan"
+    )
+    daily_activities: Mapped[list["DailyActivity"]] = relationship(
+        "DailyActivity", back_populates="user", cascade="all, delete-orphan"
+    )
+    calendar_memos: Mapped[list["CalendarMemo"]] = relationship(
+        "CalendarMemo", back_populates="user", cascade="all, delete-orphan"
     )
 
 
@@ -80,6 +90,9 @@ class Note(Base):
     quizzes: Mapped[list["Quiz"]] = relationship(
         "Quiz", back_populates="note", cascade="all, delete-orphan"
     )
+    study_schedules: Mapped[list["StudySchedule"]] = relationship(
+        "StudySchedule", back_populates="note", cascade="all, delete-orphan"
+    )
 
 
 class Quiz(Base):
@@ -120,3 +133,56 @@ class StudyRecord(Base):
 
     user: Mapped["User"] = relationship("User", back_populates="study_records")
     quiz: Mapped["Quiz"] = relationship("Quiz", back_populates="study_records")
+
+
+class StudySchedule(Base):
+    __tablename__ = "study_schedules"
+
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    note_id: Mapped[int] = Column(
+        Integer, ForeignKey("notes.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    title: Mapped[str] = Column(String(255), nullable=False)
+    scheduled_date: Mapped[date] = Column(Date, nullable=False, index=True)
+    is_completed: Mapped[bool] = Column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = Column(
+        DateTime(timezone=True), default=datetime.utcnow, nullable=False
+    )
+
+    user: Mapped["User"] = relationship("User", back_populates="study_schedules")
+    note: Mapped["Note"] = relationship("Note", back_populates="study_schedules")
+
+
+class DailyActivity(Base):
+    __tablename__ = "daily_activities"
+    __table_args__ = (
+        UniqueConstraint("user_id", "date", name="uq_user_daily_activity_date"),
+    )
+
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    date: Mapped[date] = Column(Date, nullable=False, index=True)
+    activity_count: Mapped[int] = Column(Integer, default=0, nullable=False)
+
+    user: Mapped["User"] = relationship("User", back_populates="daily_activities")
+
+
+class CalendarMemo(Base):
+    __tablename__ = "calendar_memos"
+
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    date: Mapped[date] = Column(Date, nullable=False, index=True)
+    content: Mapped[str] = Column(String(255), nullable=False)
+    created_at: Mapped[datetime] = Column(
+        DateTime(timezone=True), default=datetime.utcnow, nullable=False
+    )
+
+    user: Mapped["User"] = relationship("User", back_populates="calendar_memos")

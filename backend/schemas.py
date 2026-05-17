@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import List, Optional
 
 from pydantic import BaseModel, EmailStr, Field
@@ -97,6 +97,51 @@ class StudyRecordCreate(BaseModel):
 
 class StudyRecordBatch(BaseModel):
     records: List[StudyRecordCreate]
+
+
+# ─── Calendar ────────────────────────────────────────────────────────────────
+
+class StudyScheduleResponse(BaseModel):
+    id: int
+    user_id: int
+    note_id: int
+    title: str
+    scheduled_date: date
+    is_completed: bool
+
+    class Config:
+        from_attributes = True
+
+
+class StudyScheduleUpdateRequest(BaseModel):
+    scheduled_date: Optional[date] = None
+    is_completed: Optional[bool] = None
+
+
+class DailyActivityResponse(BaseModel):
+    id: int
+    user_id: int
+    date: date
+    activity_count: int
+
+    class Config:
+        from_attributes = True
+
+
+class CalendarMemoCreateRequest(BaseModel):
+    date: date
+    content: str = Field(..., min_length=1, max_length=255)
+
+
+class CalendarMemoResponse(BaseModel):
+    id: int
+    user_id: int
+    date: date
+    content: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
 
 
 # ─── Dashboard ───────────────────────────────────────────────────────────────

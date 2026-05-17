@@ -10,6 +10,7 @@ import Dashboard from "./components/Dashboard";
 import NoteList from "./components/NoteList";
 import NoteEditor from "./components/NoteEditor";
 import QuizPage from "./components/QuizPage";
+import CalendarPage from "./components/CalendarPage";
 
 export default function App() {
   return (
@@ -52,6 +53,13 @@ export default function App() {
               element={<ProtectedRoute><MainLayout /></ProtectedRoute>}
             >
               <Route index element={<QuizPage />} />
+            </Route>
+
+            <Route
+              path="/calendar"
+              element={<ProtectedRoute><MainLayout /></ProtectedRoute>}
+            >
+              <Route index element={<CalendarPage />} />
             </Route>
 
             <Route path="*" element={<Navigate to="/login" replace />} />

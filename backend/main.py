@@ -2,7 +2,7 @@ import json
 import os
 from io import BytesIO
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
@@ -14,16 +14,30 @@ from google import genai
 from pypdf import PdfReader
 
 from database import Base, engine, get_db
-from models import Category, Note, Quiz, StudyRecord, User
+from models import (
+    CalendarMemo,
+    Category,
+    DailyActivity,
+    Note,
+    Quiz,
+    StudyRecord,
+    StudySchedule,
+    User,
+)
 from schemas import (
+    CalendarMemoCreateRequest,
+    CalendarMemoResponse,
     DashboardStats,
     CategoryCreateRequest,
     CategoryResponse,
+    DailyActivityResponse,
     NoteCreateRequest,
     NoteResponse,
     NoteUpdateRequest,
     NoteWithQuizzesResponse,
     QuizResponse,
+    StudyScheduleResponse,
+    StudyScheduleUpdateRequest,
     StudyRecordBatch,
     TokenResponse,
     UserCreate,
@@ -42,6 +56,7 @@ load_dotenv()
 GEMINI_MODEL = "gemini-2.5-flash"
 
 DEFAULT_CATEGORY_NAME = "일반"
+REVIEW_INTERVAL_DAYS = (1, 3, 7, 14)
 
 
 # ─── DB 초기화 ────────────────────────────────────────────────────────────────
@@ -107,6 +122,50 @@ def _list_category_names(db: Session, user_id: int) -> List[str]:
         .all()
     )
     return [r.name for r in rows]
+
+
+def _increment_daily_activity(
+    db: Session,
+    user_id: int,
+    activity_date: date,
+    amount: int = 1,
+) -> DailyActivity:
+    activity = (
+        db.query(DailyActivity)
+        .filter(DailyActivity.user_id == user_id, DailyActivity.date == activity_date)
+        .first()
+    )
+    if activity:
+        activity.activity_count += amount
+        return activity
+
+    activity = DailyActivity(
+        user_id=user_id,
+        date=activity_date,
+        activity_count=amount,
+    )
+    db.add(activity)
+    return activity
+
+
+def _create_ebbinghaus_schedules(
+    db: Session,
+    user_id: int,
+    note: Note,
+    base_date: date,
+) -> List[StudySchedule]:
+    schedules: List[StudySchedule] = []
+    for idx, days in enumerate(REVIEW_INTERVAL_DAYS, start=1):
+        schedule = StudySchedule(
+            user_id=user_id,
+            note_id=note.id,
+            title=f"[복습 {idx}회차] {note.title}",
+            scheduled_date=base_date + timedelta(days=days),
+            is_completed=False,
+        )
+        db.add(schedule)
+        schedules.append(schedule)
+    return schedules
 
 
 def _get_gemini_client() -> genai.Client:
@@ -465,6 +524,11 @@ def create_note(
     db.commit()
     db.refresh(note)
 
+    today = datetime.utcnow().date()
+    _create_ebbinghaus_schedules(db, current_user.id, note, today)
+    _increment_daily_activity(db, current_user.id, today, amount=1)
+    db.commit()
+
     # Gemini로 실제 퀴즈 생성 (실패해도 노트는 저장됨)
     quiz_resps: List[QuizResponse] = []
     try:
@@ -558,7 +622,9 @@ def update_note(
     if payload.content is not None:
         note.content = payload.content
     if payload.category is not None:
-        note.category = payload.category
+        category_name = payload.category.strip() or DEFAULT_CATEGORY_NAME
+        _get_or_create_category(db, current_user.id, category_name)
+        note.category = category_name
 
     db.commit()
     db.refresh(note)
@@ -624,6 +690,7 @@ def save_study_records(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
+    note_ids_for_review = set()
     for r in payload.records:
         # quiz가 현재 유저의 노트에 속하는지 검증
         quiz = (
@@ -640,8 +707,188 @@ def save_study_records(
             is_correct=r.is_correct,
         )
         db.add(record)
+        note_ids_for_review.add(quiz.note_id)
+
+    today = datetime.utcnow().date()
+    if payload.records:
+        _increment_daily_activity(db, current_user.id, today, amount=len(payload.records))
+
+    if note_ids_for_review:
+        notes = (
+            db.query(Note)
+            .filter(Note.user_id == current_user.id, Note.id.in_(note_ids_for_review))
+            .all()
+        )
+        for note in notes:
+            _create_ebbinghaus_schedules(db, current_user.id, note, today)
+
     db.commit()
     return {"status": "ok", "saved": len(payload.records)}
+
+
+# ─── Calendar ────────────────────────────────────────────────────────────────
+
+@app.get(
+    "/api/calendar/schedules",
+    response_model=List[StudyScheduleResponse],
+    tags=["calendar"],
+)
+def get_calendar_schedules(
+    year: int = Query(..., ge=1970, le=2100),
+    month: int = Query(..., ge=1, le=12),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> List[StudyScheduleResponse]:
+    start_date = date(year, month, 1)
+    if month == 12:
+        end_date = date(year + 1, 1, 1)
+    else:
+        end_date = date(year, month + 1, 1)
+
+    schedules = (
+        db.query(StudySchedule)
+        .filter(
+            StudySchedule.user_id == current_user.id,
+            StudySchedule.scheduled_date >= start_date,
+            StudySchedule.scheduled_date < end_date,
+        )
+        .order_by(StudySchedule.scheduled_date.asc(), StudySchedule.id.asc())
+        .all()
+    )
+    return [StudyScheduleResponse.model_validate(s) for s in schedules]
+
+
+@app.patch(
+    "/api/calendar/schedules/{schedule_id}",
+    response_model=StudyScheduleResponse,
+    tags=["calendar"],
+)
+def update_calendar_schedule(
+    schedule_id: int,
+    payload: StudyScheduleUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StudyScheduleResponse:
+    schedule = (
+        db.query(StudySchedule)
+        .filter(
+            StudySchedule.id == schedule_id,
+            StudySchedule.user_id == current_user.id,
+        )
+        .first()
+    )
+    if not schedule:
+        raise HTTPException(status_code=404, detail="일정을 찾을 수 없습니다.")
+
+    if payload.scheduled_date is not None:
+        schedule.scheduled_date = payload.scheduled_date
+    if payload.is_completed is not None:
+        schedule.is_completed = payload.is_completed
+
+    db.commit()
+    db.refresh(schedule)
+    return StudyScheduleResponse.model_validate(schedule)
+
+
+@app.get(
+    "/api/calendar/heatmap",
+    response_model=List[DailyActivityResponse],
+    tags=["calendar"],
+)
+def get_calendar_heatmap(
+    year: Optional[int] = Query(default=None, ge=1970, le=2100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> List[DailyActivityResponse]:
+    target_year = year or datetime.utcnow().year
+    start_date = date(target_year, 1, 1)
+    end_date = date(target_year + 1, 1, 1)
+
+    activities = (
+        db.query(DailyActivity)
+        .filter(
+            DailyActivity.user_id == current_user.id,
+            DailyActivity.date >= start_date,
+            DailyActivity.date < end_date,
+        )
+        .order_by(DailyActivity.date.asc())
+        .all()
+    )
+    return [DailyActivityResponse.model_validate(a) for a in activities]
+
+
+@app.get(
+    "/api/calendar/memos",
+    response_model=List[CalendarMemoResponse],
+    tags=["calendar"],
+)
+def get_calendar_memos(
+    year: int = Query(..., ge=1970, le=2100),
+    month: int = Query(..., ge=1, le=12),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> List[CalendarMemoResponse]:
+    start_date = date(year, month, 1)
+    if month == 12:
+        end_date = date(year + 1, 1, 1)
+    else:
+        end_date = date(year, month + 1, 1)
+
+    memos = (
+        db.query(CalendarMemo)
+        .filter(
+            CalendarMemo.user_id == current_user.id,
+            CalendarMemo.date >= start_date,
+            CalendarMemo.date < end_date,
+        )
+        .order_by(CalendarMemo.date.asc(), CalendarMemo.created_at.asc(), CalendarMemo.id.asc())
+        .all()
+    )
+    return [CalendarMemoResponse.model_validate(m) for m in memos]
+
+
+@app.post(
+    "/api/calendar/memos",
+    response_model=CalendarMemoResponse,
+    tags=["calendar"],
+)
+def create_calendar_memo(
+    payload: CalendarMemoCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> CalendarMemoResponse:
+    content = payload.content.strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="메모 내용을 입력해주세요.")
+
+    memo = CalendarMemo(
+        user_id=current_user.id,
+        date=payload.date,
+        content=content,
+    )
+    db.add(memo)
+    db.commit()
+    db.refresh(memo)
+    return CalendarMemoResponse.model_validate(memo)
+
+
+@app.delete("/api/calendar/memos/{memo_id}", tags=["calendar"])
+def delete_calendar_memo(
+    memo_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    memo = (
+        db.query(CalendarMemo)
+        .filter(CalendarMemo.id == memo_id, CalendarMemo.user_id == current_user.id)
+        .first()
+    )
+    if not memo:
+        raise HTTPException(status_code=404, detail="메모를 찾을 수 없습니다.")
+
+    db.delete(memo)
+    db.commit()
+    return {"status": "deleted", "id": memo_id}
 
 
 # ─── Dashboard ────────────────────────────────────────────────────────────────
