@@ -14,9 +14,11 @@ from google import genai
 from pypdf import PdfReader
 
 from database import Base, engine, get_db
-from models import Note, Quiz, StudyRecord, User
+from models import Category, Note, Quiz, StudyRecord, User
 from schemas import (
     DashboardStats,
+    CategoryCreateRequest,
+    CategoryResponse,
     NoteCreateRequest,
     NoteResponse,
     NoteUpdateRequest,
@@ -33,7 +35,13 @@ from auth import create_access_token, get_current_user, hash_password, verify_pa
 load_dotenv()
 
 # Gemini — 요약·PDF 요약·퀴즈 등 모든 generate_content 호출에서 동일 모델 사용
-GEMINI_MODEL = "gemini-1.5-flash"
+# (gemini-1.5-flash / gemini-1.5-flash-latest 는 v1beta API에서 404 — 사용 불가)
+# 404 NOT_FOUND 시 대안 예시:
+# GEMINI_MODEL = "gemini-flash-latest"
+# GEMINI_MODEL = "gemini-pro-latest"
+GEMINI_MODEL = "gemini-2.5-flash"
+
+DEFAULT_CATEGORY_NAME = "일반"
 
 
 # ─── DB 초기화 ────────────────────────────────────────────────────────────────
@@ -56,6 +64,50 @@ app.add_middleware(
 
 
 # ─── 헬퍼 함수 ───────────────────────────────────────────────────────────────
+
+def _get_or_create_category(db: Session, user_id: int, name: str) -> Category:
+    """사용자별 카테고리를 조회하거나 없으면 생성한다."""
+    normalized = (name or DEFAULT_CATEGORY_NAME).strip() or DEFAULT_CATEGORY_NAME
+    existing = (
+        db.query(Category)
+        .filter(Category.user_id == user_id, Category.name == normalized)
+        .first()
+    )
+    if existing:
+        return existing
+    category = Category(user_id=user_id, name=normalized)
+    db.add(category)
+    db.flush()
+    return category
+
+
+def _ensure_user_categories_initialized(db: Session, user_id: int) -> None:
+    """기본 '일반' 카테고리와 기존 노트에 있던 카테고리 문자열을 동기화한다."""
+    _get_or_create_category(db, user_id, DEFAULT_CATEGORY_NAME)
+
+    note_categories = (
+        db.query(Note.category)
+        .filter(Note.user_id == user_id, Note.category.isnot(None))
+        .distinct()
+        .all()
+    )
+    for row in note_categories:
+        if row.category and row.category.strip():
+            _get_or_create_category(db, user_id, row.category.strip())
+
+    db.commit()
+
+
+def _list_category_names(db: Session, user_id: int) -> List[str]:
+    _ensure_user_categories_initialized(db, user_id)
+    rows = (
+        db.query(Category.name)
+        .filter(Category.user_id == user_id)
+        .order_by(Category.name)
+        .all()
+    )
+    return [r.name for r in rows]
+
 
 def _get_gemini_client() -> genai.Client:
     api_key = os.getenv("GEMINI_API_KEY")
@@ -400,11 +452,14 @@ def create_note(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> NoteWithQuizzesResponse:
+    category_name = (payload.category or DEFAULT_CATEGORY_NAME).strip() or DEFAULT_CATEGORY_NAME
+    _get_or_create_category(db, current_user.id, category_name)
+
     note = Note(
         user_id=current_user.id,
         title=payload.title or "새 노트",
         content=payload.content,
-        category=payload.category or "일반",
+        category=category_name,
     )
     db.add(note)
     db.commit()
@@ -425,18 +480,37 @@ def create_note(
     )
 
 
-@app.get("/api/notes/categories", tags=["notes"])
+@app.get("/api/notes/categories", response_model=List[str], tags=["notes"])
 def get_categories(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> List[str]:
-    rows = (
-        db.query(Note.category)
-        .filter(Note.user_id == current_user.id)
-        .distinct()
-        .all()
+    return _list_category_names(db, current_user.id)
+
+
+@app.post("/api/notes/categories", response_model=CategoryResponse, tags=["notes"])
+def create_category(
+    payload: CategoryCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> CategoryResponse:
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="카테고리 이름을 입력해주세요.")
+
+    existing = (
+        db.query(Category)
+        .filter(Category.user_id == current_user.id, Category.name == name)
+        .first()
     )
-    return sorted([r.category for r in rows if r.category])
+    if existing:
+        raise HTTPException(status_code=409, detail="이미 존재하는 카테고리입니다.")
+
+    category = Category(user_id=current_user.id, name=name)
+    db.add(category)
+    db.commit()
+    db.refresh(category)
+    return CategoryResponse.model_validate(category)
 
 
 @app.get("/api/notes", response_model=List[NoteResponse], tags=["notes"])

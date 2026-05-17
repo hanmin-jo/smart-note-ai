@@ -12,7 +12,8 @@ export default function NoteList() {
   const [inputType, setInputType] = useState("manual");
   const [pdfFile, setPdfFile] = useState(null);
   const [title, setTitle] = useState("");
-  const [category, setCategory] = useState("일반");
+  const [selectedCategory, setSelectedCategory] = useState("일반");
+  const [customCategory, setCustomCategory] = useState("");
   const modalPdfInputRef = useRef(null);
 
   const [notes, setNotes] = useState([]);
@@ -22,8 +23,11 @@ export default function NoteList() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [searchInput, setSearchInput] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("");
+  const [filterCategory, setFilterCategory] = useState("");
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
 
   const [deletingId, setDeletingId] = useState(null);
 
@@ -33,7 +37,7 @@ export default function NoteList() {
     try {
       const params = new URLSearchParams();
       if (searchQuery) params.set("search", searchQuery);
-      if (selectedCategory) params.set("category", selectedCategory);
+      if (filterCategory) params.set("category", filterCategory);
       const qs = params.toString() ? `?${params.toString()}` : "";
 
       const { data } = await api.get(`/api/notes${qs}`);
@@ -47,7 +51,7 @@ export default function NoteList() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, selectedCategory]);
+  }, [searchQuery, filterCategory]);
 
   const fetchCategories = useCallback(async () => {
     try {
@@ -69,10 +73,20 @@ export default function NoteList() {
 
   const resetModalForm = () => {
     setTitle("");
-    setCategory("일반");
+    setSelectedCategory("일반");
+    setCustomCategory("");
     setInputType("manual");
     setPdfFile(null);
     if (modalPdfInputRef.current) modalPdfInputRef.current.value = "";
+  };
+
+  const CUSTOM_CATEGORY_VALUE = "__custom__";
+
+  const resolveModalCategory = () => {
+    if (selectedCategory === CUSTOM_CATEGORY_VALUE) {
+      return customCategory.trim() || "일반";
+    }
+    return selectedCategory;
   };
 
   const closeModal = () => {
@@ -81,6 +95,13 @@ export default function NoteList() {
   };
 
   const handleCreateNote = () => {
+    if (selectedCategory === CUSTOM_CATEGORY_VALUE && !customCategory.trim()) {
+      toast("새 카테고리를 입력해 주세요.", "warning");
+      return;
+    }
+
+    const category = resolveModalCategory();
+
     if (inputType === "manual") {
       setIsModalOpen(false);
       navigate("/note/write", {
@@ -102,6 +123,31 @@ export default function NoteList() {
     resetModalForm();
   };
 
+  const closeCategoryModal = () => {
+    setIsCategoryModalOpen(false);
+    setNewCategoryName("");
+  };
+
+  const handleAddCategory = async () => {
+    const name = newCategoryName.trim();
+    if (!name) {
+      toast("카테고리 이름을 입력해 주세요.", "warning");
+      return;
+    }
+
+    setIsAddingCategory(true);
+    try {
+      await api.post("/api/notes/categories", { name });
+      toast("카테고리가 추가되었습니다.", "success");
+      closeCategoryModal();
+      await fetchCategories();
+    } catch (e) {
+      toast(e?.message || "카테고리 추가에 실패했습니다.", "error");
+    } finally {
+      setIsAddingCategory(false);
+    }
+  };
+
   const handleDelete = async (e, noteId) => {
     e.stopPropagation();
     if (!window.confirm("정말 삭제하시겠습니까?")) return;
@@ -119,7 +165,7 @@ export default function NoteList() {
     }
   };
 
-  const PRESET_CATEGORIES = ["일반", "수학", "과학", "언어", "역사", "기술"];
+  const PRESET_CATEGORIES = ["일반"];
 
   return (
     <>
@@ -150,7 +196,17 @@ export default function NoteList() {
             />
           </div>
 
-          <div className="relative">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+            <button
+              type="button"
+              onClick={() => setIsCategoryModalOpen(true)}
+              className="inline-flex w-full sm:w-auto items-center justify-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 transition"
+            >
+              <Plus className="h-4 w-4 text-slate-500" />
+              <span>➕ 카테고리 추가</span>
+            </button>
+
+            <div className="relative flex-1 sm:flex-none">
             <button
               type="button"
               onClick={() => setShowCategoryDropdown((p) => !p)}
@@ -158,21 +214,21 @@ export default function NoteList() {
             >
               <span className="inline-flex items-center gap-2">
                 <Filter className="h-4 w-4 text-slate-400" />
-                <span>{selectedCategory || "모든 카테고리"}</span>
+                <span>{filterCategory || "모든 카테고리"}</span>
               </span>
               <ChevronDown className="h-4 w-4 text-slate-400" />
             </button>
 
             {showCategoryDropdown && (
               <div className="absolute right-0 mt-2 w-44 rounded-xl border border-slate-200 bg-white shadow-lg z-10 py-1">
-                <button type="button" onClick={() => { setSelectedCategory(""); setShowCategoryDropdown(false); }}
+                <button type="button" onClick={() => { setFilterCategory(""); setShowCategoryDropdown(false); }}
                   className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
                 >
                   모든 카테고리
                 </button>
                 {categories.map((cat) => (
                   <button key={cat} type="button"
-                    onClick={() => { setSelectedCategory(cat); setShowCategoryDropdown(false); }}
+                    onClick={() => { setFilterCategory(cat); setShowCategoryDropdown(false); }}
                     className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
                   >
                     {cat}
@@ -180,6 +236,7 @@ export default function NoteList() {
                 ))}
               </div>
             )}
+            </div>
           </div>
         </section>
 
@@ -203,9 +260,9 @@ export default function NoteList() {
                 <FileText className="h-7 w-7 text-slate-300" />
               </div>
               <p className="mt-4 text-sm md:text-base text-slate-500">
-                {searchQuery || selectedCategory ? "검색 결과가 없습니다" : "아직 노트가 없습니다"}
+                {searchQuery || filterCategory ? "검색 결과가 없습니다" : "아직 노트가 없습니다"}
               </p>
-              {!searchQuery && !selectedCategory && (
+              {!searchQuery && !filterCategory && (
                 <button type="button" onClick={() => setIsModalOpen(true)}
                   className="mt-5 inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-slate-800 transition"
                 >
@@ -354,17 +411,45 @@ export default function NoteList() {
 
               <div className="space-y-1">
                 <label className="block text-xs md:text-sm font-medium text-slate-700">카테고리</label>
-                <input
-                  list="note-categories"
-                  value={category || ""}
-                  onChange={(e) => setCategory(e.target.value ?? "")}
-                  placeholder="카테고리를 선택하거나 입력하세요"
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 transition"
-                />
-                <datalist id="note-categories">
-                  {PRESET_CATEGORIES.map((c) => <option key={c} value={c} />)}
-                  {categories.filter((c) => !PRESET_CATEGORIES.includes(c)).map((c) => <option key={c} value={c} />)}
-                </datalist>
+                <select
+                  value={selectedCategory}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setSelectedCategory(value);
+                    if (value !== CUSTOM_CATEGORY_VALUE) {
+                      setCustomCategory("");
+                    }
+                  }}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 transition"
+                >
+                  {PRESET_CATEGORIES.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                  {categories
+                    .filter((c) => c && !PRESET_CATEGORIES.includes(c))
+                    .map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  <option value={CUSTOM_CATEGORY_VALUE}>➕ 직접 입력</option>
+                </select>
+
+                <div
+                  className={`grid transition-[grid-template-rows,opacity,margin] duration-300 ease-out ${
+                    selectedCategory === CUSTOM_CATEGORY_VALUE
+                      ? "mt-2 grid-rows-[1fr] opacity-100"
+                      : "mt-0 grid-rows-[0fr] opacity-0"
+                  }`}
+                >
+                  <div className="overflow-hidden">
+                    <input
+                      type="text"
+                      value={customCategory || ""}
+                      onChange={(e) => setCustomCategory(e.target.value ?? "")}
+                      placeholder="새 카테고리 입력"
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 transition"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -373,6 +458,66 @@ export default function NoteList() {
                 className="w-full inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 transition"
               >
                 노트 생성
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 카테고리 추가 모달 */}
+      {isCategoryModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <button
+            type="button"
+            aria-label="모달 닫기"
+            onClick={closeCategoryModal}
+            className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"
+          />
+          <div className="relative z-50 w-full max-w-sm rounded-2xl bg-white shadow-2xl border border-slate-200 px-6 py-6">
+            <header className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">카테고리 추가</h2>
+                <p className="mt-1 text-xs text-slate-500">새 카테고리 이름을 입력하세요</p>
+              </div>
+              <button
+                type="button"
+                onClick={closeCategoryModal}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 transition"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </header>
+
+            <div className="mt-4 space-y-1">
+              <label className="block text-xs font-medium text-slate-700">새 카테고리 이름</label>
+              <input
+                type="text"
+                value={newCategoryName || ""}
+                onChange={(e) => setNewCategoryName(e.target.value ?? "")}
+                placeholder="예: 수학, 영어"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 transition"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleAddCategory();
+                }}
+              />
+            </div>
+
+            <div className="mt-6 flex gap-2">
+              <button
+                type="button"
+                onClick={closeCategoryModal}
+                disabled={isAddingCategory}
+                className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-60"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleAddCategory}
+                disabled={isAddingCategory}
+                className="flex-1 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 transition disabled:opacity-60"
+              >
+                {isAddingCategory ? "추가 중..." : "추가"}
               </button>
             </div>
           </div>

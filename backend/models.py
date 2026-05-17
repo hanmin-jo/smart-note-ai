@@ -8,6 +8,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship, Mapped
 
@@ -29,9 +30,30 @@ class User(Base):
     notes: Mapped[list["Note"]] = relationship(
         "Note", back_populates="user", cascade="all, delete-orphan"
     )
+    categories: Mapped[list["Category"]] = relationship(
+        "Category", back_populates="user", cascade="all, delete-orphan"
+    )
     study_records: Mapped[list["StudyRecord"]] = relationship(
         "StudyRecord", back_populates="user", cascade="all, delete-orphan"
     )
+
+
+class Category(Base):
+    __tablename__ = "categories"
+    __table_args__ = (
+        UniqueConstraint("user_id", "name", name="uq_user_category_name"),
+    )
+
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = Column(String(100), nullable=False)
+    created_at: Mapped[datetime] = Column(
+        DateTime(timezone=True), default=datetime.utcnow, nullable=False
+    )
+
+    user: Mapped["User"] = relationship("User", back_populates="categories")
 
 
 class Note(Base):

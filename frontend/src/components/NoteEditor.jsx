@@ -12,29 +12,22 @@ export default function NoteEditor() {
   const toast = useToast();
 
   const state = location.state || {};
-  const noteFromState = state.note || (state.title ? state : null);
+  const noteFromState = state.note || (state.title && !state.pdfFile ? state : null);
   const incomingPdfFile = !id && state.pdfFile instanceof File ? state.pdfFile : null;
-  const titleFromPdfRoute =
+  const titleFromRoute =
     typeof state.title === "string" ? state.title.trim() : "";
-
-  const hasPrefillContent = !!(noteFromState?.content?.trim());
-
-  const [creationMode, setCreationMode] = useState(() => {
-    if (id) return "manual";
-    if (hasPrefillContent) return "manual";
-    if (incomingPdfFile) return "pdf";
-    return null;
-  });
 
   const [title, setTitle] = useState(() => {
     if (id) return noteFromState?.title || "새 노트";
     if (incomingPdfFile) {
-      return titleFromPdfRoute || `[PDF 요약] ${incomingPdfFile.name}`;
+      return titleFromRoute || `[PDF 요약] ${incomingPdfFile.name}`;
     }
-    return noteFromState?.title || "새 노트";
+    return noteFromState?.title || titleFromRoute || "새 노트";
   });
   const [content, setContent] = useState(noteFromState?.content || "");
-  const [category, setCategory] = useState(state.category ?? noteFromState?.category ?? "일반");
+  const [category, setCategory] = useState(
+    state.category ?? noteFromState?.category ?? "일반"
+  );
   const [isLoadingRoutePdf, setIsLoadingRoutePdf] = useState(() => !!incomingPdfFile);
   const [summaryResult, setSummaryResult] = useState("");
   const [quizResult, setQuizResult] = useState(null);
@@ -44,9 +37,6 @@ export default function NoteEditor() {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingNote, setIsLoadingNote] = useState(false);
   const pdfInputRef = useRef(null);
-
-  const isNewNote = !id;
-  const showModePicker = isNewNote && creationMode === null;
 
   // 모달 등에서 location.state.pdfFile 로 넘어온 PDF → 마운트 시 자동 업로드·요약
   useEffect(() => {
@@ -67,7 +57,6 @@ export default function NoteEditor() {
         setContent(data.summary ?? "");
         setSummaryResult("");
         setQuizResult(null);
-        setCreationMode("pdf");
         navigate(location.pathname, { replace: true, state: {} });
       } catch (err) {
         if (cancelled) return;
@@ -104,16 +93,6 @@ export default function NoteEditor() {
       })
       .finally(() => setIsLoadingNote(false));
   }, [id]);
-
-  const handleResetCreationFlow = () => {
-    setCreationMode(null);
-    setTitle("새 노트");
-    setContent("");
-    setCategory("일반");
-    setSummaryResult("");
-    setQuizResult(null);
-    setIsEditingSummary(false);
-  };
 
   const handleSaveNote = async () => {
     if (!title.trim()) { toast("노트 제목을 입력해 주세요.", "warning"); return; }
@@ -170,7 +149,6 @@ export default function NoteEditor() {
         setContent(summary);
         setSummaryResult("");
         setQuizResult(null);
-        setCreationMode("pdf");
       } else {
         setSummaryResult(summary);
       }
@@ -197,7 +175,7 @@ export default function NoteEditor() {
     }
   };
 
-  const PRESET_CATEGORIES = ["일반", "수학", "과학", "언어", "역사", "기술"];
+  const PRESET_CATEGORIES = ["일반"];
 
   if (isLoadingNote) {
     return (
@@ -207,77 +185,6 @@ export default function NoteEditor() {
     );
   }
 
-  /* ─── 초기 선택 화면 (새 노트 + creationMode null) ─── */
-  if (showModePicker) {
-    return (
-      <div className="relative min-h-[calc(100vh-8rem)] space-y-8">
-        <header className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => navigate(-1)}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50 transition"
-            aria-label="뒤로 가기"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </button>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-900 md:text-2xl">새 노트</h1>
-            <p className="text-sm text-slate-500">시작 방식을 선택하세요</p>
-          </div>
-        </header>
-
-        <input
-          ref={pdfInputRef}
-          type="file"
-          accept="application/pdf"
-          className="hidden"
-          onChange={handlePdfUpload}
-        />
-
-        <div className="flex min-h-[50vh] flex-col items-center justify-center px-2">
-          <div className="grid w-full max-w-4xl grid-cols-1 gap-6 md:grid-cols-2 md:gap-8">
-            <button
-              type="button"
-              onClick={() => setCreationMode("manual")}
-              disabled={isLoadingSummary}
-              className="group relative flex min-h-[200px] flex-col items-center justify-center rounded-2xl border-2 border-slate-200 bg-white p-8 text-center shadow-sm transition duration-300 hover:z-10 hover:scale-[1.02] hover:border-blue-400 hover:shadow-xl hover:shadow-blue-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:pointer-events-none disabled:opacity-50"
-            >
-              <span className="text-4xl transition group-hover:scale-110">✏️</span>
-              <span className="mt-4 text-lg font-bold text-slate-800">직접 작성하기</span>
-              <span className="mt-2 max-w-xs text-sm text-slate-500">
-                제목과 내용을 직접 입력해 노트를 만듭니다
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => pdfInputRef.current?.click()}
-              disabled={isLoadingSummary}
-              className="group relative flex min-h-[200px] flex-col items-center justify-center rounded-2xl border-2 border-slate-200 bg-white p-8 text-center shadow-sm transition duration-300 hover:z-10 hover:scale-[1.02] hover:border-emerald-400 hover:shadow-xl hover:shadow-emerald-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:pointer-events-none disabled:opacity-50"
-            >
-              <span className="text-4xl transition group-hover:scale-110">📄</span>
-              <span className="mt-4 text-lg font-bold text-slate-800">PDF 업로드 &amp; 요약</span>
-              <span className="mt-2 max-w-xs text-sm text-slate-500">
-                PDF를 올리면 AI가 요약해 본문에 채워 드립니다
-              </span>
-            </button>
-          </div>
-        </div>
-
-        {isLoadingSummary && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm">
-            <div className="flex flex-col items-center gap-3 rounded-2xl border border-white/20 bg-white px-8 py-6 shadow-2xl">
-              <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-              <p className="text-sm font-semibold text-slate-800">PDF 요약 중...</p>
-              <p className="text-xs text-slate-500">잠시만 기다려 주세요</p>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  /* ─── 에디터 화면 (기존 노트 수정 · 새 노트 manual/pdf) ─── */
   return (
     <div className="space-y-6 md:space-y-8">
       <header className="flex flex-wrap items-start justify-between gap-4">
@@ -290,15 +197,6 @@ export default function NoteEditor() {
           >
             <ArrowLeft className="h-4 w-4" />
           </button>
-          {isNewNote && (
-            <button
-              type="button"
-              onClick={handleResetCreationFlow}
-              className="mt-0.5 inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900 shadow-sm hover:bg-amber-100 transition"
-            >
-              🔙 방식 변경
-            </button>
-          )}
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <input
