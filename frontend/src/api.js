@@ -1,4 +1,12 @@
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+const BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "/api").replace(/\/$/, "");
+
+function buildApiUrl(path) {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  if (BASE_URL === "/api" && normalizedPath.startsWith("/api/")) {
+    return `${BASE_URL}${normalizedPath.slice(4)}`;
+  }
+  return `${BASE_URL}${normalizedPath}`;
+}
 
 export function getToken() {
   return localStorage.getItem("token");
@@ -18,7 +26,7 @@ async function request(path, options = {}) {
     typeof FormData !== "undefined" && options.body instanceof FormData;
   let res;
   try {
-    res = await fetch(`${BASE_URL}${path}`, {
+    res = await fetch(buildApiUrl(path), {
       ...options,
       headers: authHeaders(options.headers, isFormData),
     });
